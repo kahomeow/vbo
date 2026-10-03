@@ -120,41 +120,56 @@
     </div>
 
     <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在為 v寶 載入最新班次...</div>
+      <div class="status-msg">正在為 v寶 載入翠灣邨到站時間...</div>
     </div>
   </div>
 
   <script>
+    // 專屬路線列表（包含正確方向 dest 及 翠灣邨站號/順序）
     const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dest: '田灣' },
-      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dest: '啟德' }
+      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)', dir: 'O', seq: 4 },
+      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)',   dir: 'O', seq: 4 },
+      { route: '8',    company: 'CTB', dest: '杏花邨',         dir: 'O', seq: 3 },
+      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角',   dir: 'I', seq: 5 },
+      { route: '770',  company: 'CTB', dest: '田灣',           dir: 'O', seq: 3 },
+      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)', dir: 'O', seq: 2 },
+      { route: '608P', company: 'CTB', dest: '啟德',           dir: 'O', seq: 2 }
     ];
 
-    // 嘗試多個政府 API Endpoint 保證獲取數據
-    async function fetchEtaWithFallback(company, route) {
-      const urls = [
-        `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${route}`,
-        `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/NWFB/${route}`,
-        `https://data.etabus.gov.hk/v1/transport/kmb/route-eta/${route}/1`
-      ];
+    // 精確抓取指定路線及站點到站時間
+    async function fetchTsuiWanEta(item) {
+      try {
+        if (item.company === 'CTB') {
+          // 嘗試城巴單一路線站點 API
+          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/001267/${item.route}`);
+          const data = await res.json();
+          let list = data.data || [];
+          
+          // 如果按站點拿到資料，直接過濾該方向
+          list = list.filter(i => (i.dir === item.dir || i.dir === 'outbound' || i.dir === 'inbound') && i.eta);
+          
+          if (list.length > 0) return list;
 
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data && data.data.length > 0) {
-              return data.data;
-            }
-          }
-        } catch (e) {}
+          // 備援方案：從全線 ETA 中精確匹配「翠灣邨, 永泰道」或特定 seq 站位
+          const fallbackRes = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${item.route}`);
+          const fallbackData = await fallbackRes.json();
+          const allEta = fallbackData.data || [];
+
+          return allEta.filter(i => 
+            (i.dir === item.dir) && 
+            i.eta && 
+            (i.seq === item.seq || i.seq === item.seq + 1 || i.seq === item.seq - 1)
+          );
+        } else {
+          // 九巴 118P
+          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/001407`);
+          const data = await res.json();
+          const list = data.data || [];
+          return list.filter(i => i.route === item.route && i.eta);
+        }
+      } catch (err) {
+        return [];
       }
-      return [];
     }
 
     async function loadAllEta() {
@@ -162,29 +177,21 @@
       const now = new Date();
 
       try {
-        const promises = WATCH_ROUTES.map(r => fetchEtaWithFallback(r.company, r.route));
+        const promises = WATCH_ROUTES.map(r => fetchTsuiWanEta(r));
         const results = await Promise.all(promises);
 
         let html = '';
 
         WATCH_ROUTES.forEach((target, index) => {
-          const rawList = results[index] || [];
-          
-          // 過濾有時間且方向正確的班次
-          const matched = rawList.filter(item => {
-            const isMatchDir = item.dir === 'O' || item.dir === 'outbound' || item.dir === 'I';
-            return isMatchDir && item.eta;
-          });
-
-          // 按時間由近至遠排序
-          matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+          const matched = results[index] || [];
 
           const companyClass = target.company.toLowerCase();
           const tagText = target.company === 'CTB' ? '城巴' : '九巴';
           const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
 
           if (matched.length > 0) {
-            // 取前兩班
+            matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+
             const bus1 = matched[0];
             const bus2 = matched[1];
 
@@ -207,7 +214,7 @@
                   <span class="company-tag ${tagClass}">${tagText}</span>
                 </div>
                 <div class="route-info">
-                  <div class="dest-name">往 ${bus1.dest_tc || target.dest}</div>
+                  <div class="dest-name">往 ${target.dest}</div>
                 </div>
                 <div class="eta-times">
                   <div class="primary-eta">${primaryStr}</div>
