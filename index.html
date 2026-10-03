@@ -118,10 +118,10 @@
   </div>
 
   <script>
-    // 翠灣邨, 永泰道 官方 ID
-    const CTB_STOP_ID = '001267';
+    // 翠灣邨 永泰道 官方可能之 ID 變體陣列
+    const POSSIBLE_STOP_IDS = ['001267-01', '001267', '001267-02'];
 
-    // 翠灣邨主要城巴路線
+    // 關注城巴路線
     const CTB_ROUTES = [
       { route: '788', dest: '中環 (港澳碼頭)' },
       { route: '789', dest: '金鐘 (樂禮街)' },
@@ -130,20 +130,20 @@
       { route: '770', dest: '田灣' }
     ];
 
-    // 同時向 CTB 與 NWFB 接口查詢該路線的倒數時間
-    async function fetchSingleRouteEta(route) {
-      try {
-        const [resCtb, resNwfb] = await Promise.all([
-          fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${route}`).then(r => r.json()).catch(() => ({ data: [] })),
-          fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/NWFB/${CTB_STOP_ID}/${route}`).then(r => r.json()).catch(() => ({ data: [] }))
-        ]);
-
-        const listCtb = resCtb.data || [];
-        const listNwfb = resNwfb.data || [];
-        return [...listCtb, ...listNwfb];
-      } catch (err) {
-        return [];
+    // 抓取單一路線在所有可能站點 ID 的數據
+    async function fetchRouteEta(route) {
+      for (const stopId of POSSIBLE_STOP_IDS) {
+        try {
+          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${stopId}/${route}`);
+          const data = await res.json();
+          if (data.data && data.data.length > 0) {
+            return data.data; // 只要拿到數據就立刻回傳
+          }
+        } catch (e) {
+          // 繼續嘗試下一個 ID
+        }
       }
+      return [];
     }
 
     async function loadCtbEta() {
@@ -151,8 +151,7 @@
       const now = new Date();
 
       try {
-        // 並行請求所有路線的 ETA
-        const promises = CTB_ROUTES.map(item => fetchSingleRouteEta(item.route));
+        const promises = CTB_ROUTES.map(item => fetchRouteEta(item.route));
         const results = await Promise.all(promises);
 
         let html = '';
@@ -162,7 +161,6 @@
           const matched = etaList.filter(item => item.eta);
 
           if (matched.length > 0) {
-            // 按時間先後排序
             matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
             const bus1 = matched[0];
