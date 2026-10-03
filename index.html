@@ -118,7 +118,7 @@
   </div>
 
   <script>
-    // 翠灣邨, 永泰道 城巴官方 ID
+    // 翠灣邨, 永泰道 官方 ID
     const CTB_STOP_ID = '001267';
 
     // 翠灣邨主要城巴路線
@@ -130,21 +130,36 @@
       { route: '770', dest: '田灣' }
     ];
 
+    // 同時向 CTB 與 NWFB 接口查詢該路線的倒數時間
+    async function fetchSingleRouteEta(route) {
+      try {
+        const [resCtb, resNwfb] = await Promise.all([
+          fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${route}`).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/NWFB/${CTB_STOP_ID}/${route}`).then(r => r.json()).catch(() => ({ data: [] }))
+        ]);
+
+        const listCtb = resCtb.data || [];
+        const listNwfb = resNwfb.data || [];
+        return [...listCtb, ...listNwfb];
+      } catch (err) {
+        return [];
+      }
+    }
+
     async function loadCtbEta() {
       const container = document.getElementById('etaContainer');
       const now = new Date();
 
       try {
-        // 直接 call 城巴官方全站 API
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}`);
-        const data = await res.json();
-        const etaList = data.data || [];
+        // 並行請求所有路線的 ETA
+        const promises = CTB_ROUTES.map(item => fetchSingleRouteEta(item.route));
+        const results = await Promise.all(promises);
 
         let html = '';
 
-        CTB_ROUTES.forEach(target => {
-          // 過濾對應路線且有 ETA 的數據
-          const matched = etaList.filter(item => item.route === target.route && item.eta);
+        CTB_ROUTES.forEach((target, index) => {
+          const etaList = results[index] || [];
+          const matched = etaList.filter(item => item.eta);
 
           if (matched.length > 0) {
             // 按時間先後排序
