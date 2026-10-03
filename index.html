@@ -120,34 +120,29 @@
     </div>
 
     <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在為 v寶 載入 Data.gov.hk 巴士班次...</div>
+      <div class="status-msg">正在為 v寶 載入巴士班次...</div>
     </div>
   </div>
 
   <script>
-    // Data.gov.hk 官方對應站點編號
-    const CTB_STOP_ID = '001267';
-    const KMB_STOP_ID = '001407';
-
-    // 翠灣邨完整路線對照清單
     const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dest: '田灣' },
-      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dest: '啟德' }
+      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)', seq: 4 },
+      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)',   seq: 4 },
+      { route: '8',    company: 'CTB', dest: '杏花邨',         seq: 3 },
+      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角',   seq: 5 },
+      { route: '770',  company: 'CTB', dest: '田灣',           seq: 3 },
+      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)', seq: 2 },
+      { route: '608P', company: 'CTB', dest: '啟德',           seq: 2 }
     ];
 
-    // 政府開放資料 API 發送
-    async function fetchGovEta(company, route, stopId) {
+    // 獲取該路線全線 ETA 數據
+    async function fetchRouteEtaData(target) {
       try {
         let url = '';
-        if (company === 'CTB') {
-          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${stopId}/${route}`;
+        if (target.company === 'CTB') {
+          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${target.route}`;
         } else {
-          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${stopId}`;
+          url = `https://data.etabus.gov.hk/v1/transport/kmb/route-eta/${target.route}/1`;
         }
         const res = await fetch(url);
         const data = await res.json();
@@ -162,31 +157,31 @@
       const now = new Date();
 
       try {
-        // 並行獲取所有路線 Data.gov.hk 數據
-        const promises = WATCH_ROUTES.map(r => 
-          fetchGovEta(r.company, r.route, r.company === 'CTB' ? CTB_STOP_ID : KMB_STOP_ID)
-        );
+        const promises = WATCH_ROUTES.map(r => fetchRouteEtaData(r));
         const results = await Promise.all(promises);
 
         let html = '';
 
         WATCH_ROUTES.forEach((target, index) => {
-          let rawList = results[index] || [];
+          const rawList = results[index] || [];
           
-          // 如果是九巴 API，需要多做一層路線過濾
-          if (target.company === 'KMB') {
-            rawList = rawList.filter(item => item.route === target.route);
-          }
+          // 針對翠灣邨的車站順序 (seq) 或方向進行精確過濾
+          const matched = rawList.filter(item => {
+            // 只要有到站時間，並且是往指定目的地方向 (dir === 'O' 或 outbound)
+            const isMatchDir = (item.dir === 'O' || item.dir === 'outbound');
+            // 如果 API 帶有 seq 資訊，優先匹配翠灣邨附近的站位順序
+            const isMatchSeq = target.seq ? (item.seq === target.seq || item.seq === target.seq + 1 || item.seq === target.seq - 1) : true;
+            return isMatchDir && item.eta && isMatchSeq;
+          });
 
-          const matched = rawList.filter(item => item.eta);
+          // 按時間排序
+          matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
           const companyClass = target.company.toLowerCase();
           const tagText = target.company === 'CTB' ? '城巴' : '九巴';
           const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
 
           if (matched.length > 0) {
-            matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
-
             const bus1 = matched[0];
             const bus2 = matched[1];
 
