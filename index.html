@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v寶專用 💙 城巴翠灣邨時間表</title>
+  <title>v寶專用 💙 翠灣邨實時巴士時間表</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -55,26 +55,33 @@
       margin-bottom: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.04);
     }
+    .route-item.kmb {
+      background: #fff5f5;
+      border-color: #ff5252;
+    }
     .route-badge {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      min-width: 70px;
+      min-width: 75px;
     }
     .route-number {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
-      color: #1565c0;
     }
+    .route-item.ctb .route-number { color: #1565c0; }
+    .route-item.kmb .route-number { color: #e60012; }
     .company-tag {
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 4px;
-      background-color: #ffd100;
-      color: #333;
+      color: white;
       font-weight: bold;
       margin-top: 2px;
     }
+    .ctb-tag { background-color: #ffd100; color: #333; }
+    .kmb-tag { background-color: #e60012; }
+
     .route-info {
       flex: 1;
       padding: 0 12px;
@@ -107,58 +114,75 @@
 
   <div class="card">
     <div class="header">
-      <h1>v寶專用 💙 城巴時間表</h1>
+      <h1>v寶專用 💙 時間表</h1>
       <p>📍 永泰道 - 翠灣邨 (Tsui Wan Estate)</p>
-      <button class="update-btn" onclick="loadCtbEta()">🔄 即時更新到站時間</button>
+      <button class="update-btn" onclick="loadAllEta()">🔄 即時更新到站時間</button>
     </div>
 
     <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在為 v寶 載入城巴班次...</div>
+      <div class="status-msg">正在為 v寶 載入 Data.gov.hk 巴士班次...</div>
     </div>
   </div>
 
   <script>
-    // 翠灣邨 永泰道 官方可能之 ID 變體陣列
-    const POSSIBLE_STOP_IDS = ['001267-01', '001267', '001267-02'];
+    // Data.gov.hk 官方對應站點編號
+    const CTB_STOP_ID = '001267';
+    const KMB_STOP_ID = '001407';
 
-    // 關注城巴路線
-    const CTB_ROUTES = [
-      { route: '788', dest: '中環 (港澳碼頭)' },
-      { route: '789', dest: '金鐘 (樂禮街)' },
-      { route: '8',   dest: '杏花邨' },
-      { route: '85',  dest: '寶馬山 / 北角' },
-      { route: '770', dest: '田灣' }
+    // 翠灣邨完整路線對照清單
+    const WATCH_ROUTES = [
+      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
+      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
+      { route: '8',    company: 'CTB', dest: '杏花邨' },
+      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
+      { route: '770',  company: 'CTB', dest: '田灣' },
+      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
+      { route: '608P', company: 'CTB', dest: '啟德' }
     ];
 
-    // 抓取單一路線在所有可能站點 ID 的數據
-    async function fetchRouteEta(route) {
-      for (const stopId of POSSIBLE_STOP_IDS) {
-        try {
-          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${stopId}/${route}`);
-          const data = await res.json();
-          if (data.data && data.data.length > 0) {
-            return data.data; // 只要拿到數據就立刻回傳
-          }
-        } catch (e) {
-          // 繼續嘗試下一個 ID
+    // 政府開放資料 API 發送
+    async function fetchGovEta(company, route, stopId) {
+      try {
+        let url = '';
+        if (company === 'CTB') {
+          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${stopId}/${route}`;
+        } else {
+          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${stopId}`;
         }
+        const res = await fetch(url);
+        const data = await res.json();
+        return data.data || [];
+      } catch (err) {
+        return [];
       }
-      return [];
     }
 
-    async function loadCtbEta() {
+    async function loadAllEta() {
       const container = document.getElementById('etaContainer');
       const now = new Date();
 
       try {
-        const promises = CTB_ROUTES.map(item => fetchRouteEta(item.route));
+        // 並行獲取所有路線 Data.gov.hk 數據
+        const promises = WATCH_ROUTES.map(r => 
+          fetchGovEta(r.company, r.route, r.company === 'CTB' ? CTB_STOP_ID : KMB_STOP_ID)
+        );
         const results = await Promise.all(promises);
 
         let html = '';
 
-        CTB_ROUTES.forEach((target, index) => {
-          const etaList = results[index] || [];
-          const matched = etaList.filter(item => item.eta);
+        WATCH_ROUTES.forEach((target, index) => {
+          let rawList = results[index] || [];
+          
+          // 如果是九巴 API，需要多做一層路線過濾
+          if (target.company === 'KMB') {
+            rawList = rawList.filter(item => item.route === target.route);
+          }
+
+          const matched = rawList.filter(item => item.eta);
+
+          const companyClass = target.company.toLowerCase();
+          const tagText = target.company === 'CTB' ? '城巴' : '九巴';
+          const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
 
           if (matched.length > 0) {
             matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
@@ -179,10 +203,10 @@
             }
 
             html += `
-              <div class="route-item">
+              <div class="route-item ${companyClass}">
                 <div class="route-badge">
                   <span class="route-number">${target.route}</span>
-                  <span class="company-tag">城巴</span>
+                  <span class="company-tag ${tagClass}">${tagText}</span>
                 </div>
                 <div class="route-info">
                   <div class="dest-name">往 ${bus1.dest_tc || target.dest}</div>
@@ -195,10 +219,10 @@
             `;
           } else {
             html += `
-              <div class="route-item" style="opacity:0.6;">
+              <div class="route-item ${companyClass}" style="opacity:0.6;">
                 <div class="route-badge">
                   <span class="route-number">${target.route}</span>
-                  <span class="company-tag">城巴</span>
+                  <span class="company-tag ${tagClass}">${tagText}</span>
                 </div>
                 <div class="route-info">
                   <div class="dest-name">往 ${target.dest}</div>
@@ -216,12 +240,12 @@
 
       } catch (err) {
         console.error(err);
-        container.innerHTML = `<div class="status-msg">載入城巴資料失敗，請點擊按鈕重試</div>`;
+        container.innerHTML = `<div class="status-msg">載入失敗，請點擊按鈕重試</div>`;
       }
     }
 
-    loadCtbEta();
-    setInterval(loadCtbEta, 15000);
+    loadAllEta();
+    setInterval(loadAllEta, 15000);
   </script>
 </body>
 </html>
