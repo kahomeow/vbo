@@ -125,11 +125,11 @@
   </div>
 
   <script>
-    // 站點 API ID (翠灣邨, 永泰道)
+    // 翠灣邨 永泰道 車站 ID
     const CTB_STOP_ID = '001267';
     const KMB_STOP_ID = '001407';
 
-    // 完全對照官方 App 之日間路線清單
+    // 關注路線清單
     const WATCH_ROUTES = [
       { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
       { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
@@ -140,42 +140,20 @@
       { route: '608P', company: 'KMB', dest: '啟德' }
     ];
 
-    // 城巴 ETA 請求
-    async function fetchCtbEta(route) {
-      try {
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${route}`);
-        const data = await res.json();
-        return data.data || [];
-      } catch (err) {
-        return [];
-      }
-    }
-
-    // 九巴 ETA 請求
-    async function fetchKmbEta() {
-      try {
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
-        const data = await res.json();
-        return data.data || [];
-      } catch (err) {
-        return [];
-      }
-    }
-
     async function loadAllEta() {
       const container = document.getElementById('etaContainer');
       const now = new Date();
 
       try {
-        const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbEta(r.route));
-        const kmbPromise = fetchKmbEta();
-
-        const [ctbResults, kmbData] = await Promise.all([
-          Promise.all(ctbPromises),
-          kmbPromise
+        // 同時向城巴與九巴發送通用的車站 ETA 請求
+        const [ctbRes, kmbRes] = await Promise.all([
+          fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/${CTB_STOP_ID}`).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`).then(r => r.json()).catch(() => ({ data: [] }))
         ]);
 
-        const ctbData = ctbResults.flat();
+        const ctbData = ctbRes.data || [];
+        const kmbData = kmbRes.data || [];
+
         let html = '';
 
         WATCH_ROUTES.forEach(target => {
@@ -191,6 +169,7 @@
           const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
 
           if (matched.length > 0) {
+            // 按時間排序
             matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
             const bus1 = matched[0];
