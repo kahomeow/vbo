@@ -91,8 +91,7 @@
   </div>
 
   <script>
-    // 城巴「翠灣邨, 永泰道」真實官方 ID 陣列 (含備用 ID)
-    const CTB_REAL_STOP_IDS = ['002497', '002537'];
+    const CTB_STOP_ID = '001267';
     const KMB_STOP_ID = '001407';
 
     const WATCH_ROUTES = [
@@ -105,30 +104,29 @@
       { route: '608P', company: 'CTB', dest: '啟德' }
     ];
 
-    async function fetchCtbSingleRoute(route) {
-      for (const stopId of CTB_REAL_STOP_IDS) {
-        try {
-          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${stopId}/${route}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data && data.data.length > 0) {
-              return data.data.filter(i => i.eta);
-            }
-          }
-        } catch (e) {}
-      }
-      return [];
-    }
-
-    async function fetchKmbEta() {
+    async function fetchSingleEta(target) {
       try {
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
-        if (res.ok) {
-          const data = await res.json();
-          return data.data || [];
+        let url = '';
+        if (target.company === 'CTB') {
+          // 關鍵修正：城巴的 Endpoint 是 /eta/ 不是 /stop-eta/
+          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/eta/CTB/${CTB_STOP_ID}/${target.route}`;
+        } else {
+          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`;
         }
-      } catch (e) {}
-      return [];
+
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        let list = data.data || [];
+
+        if (target.company === 'KMB') {
+          list = list.filter(i => i.route === target.route);
+        }
+
+        return list.filter(i => i.eta);
+      } catch (err) {
+        return [];
+      }
     }
 
     async function loadAllEta() {
@@ -136,29 +134,13 @@
       const now = new Date();
 
       try {
-        const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbSingleRoute(r.route));
-        const kmbPromise = fetchKmbEta();
-
-        const [ctbResults, kmbList] = await Promise.all([
-          Promise.all(ctbPromises),
-          kmbPromise
-        ]);
-
-        let ctbMap = {};
-        WATCH_ROUTES.filter(r => r.company === 'CTB').forEach((r, idx) => {
-          ctbMap[r.route] = ctbResults[idx];
-        });
+        const promises = WATCH_ROUTES.map(item => fetchSingleEta(item));
+        const results = await Promise.all(promises);
 
         let html = '';
 
-        WATCH_ROUTES.forEach((target) => {
-          let matched = [];
-
-          if (target.company === 'CTB') {
-            matched = ctbMap[target.route] || [];
-          } else {
-            matched = kmbList.filter(i => i.route === target.route && i.eta);
-          }
+        WATCH_ROUTES.forEach((target, index) => {
+          const matched = results[index] || [];
 
           const companyClass = target.company.toLowerCase();
           const tagText = target.company === 'CTB' ? '城巴' : '九巴';
