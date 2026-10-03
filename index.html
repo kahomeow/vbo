@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v寶專用 💙 時間表</title>
+  <title>城巴 API 終極全測模式</title>
 
   <!-- vConsole 手機除錯工具 -->
   <script src="https://cdn.jsdelivr.net/npm/vconsole@latest/dist/vconsole.min.js"></script>
@@ -12,123 +12,126 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #f0f8ff;
       color: #333;
       padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
     }
     .card {
       background: white;
-      width: 100%;
-      max-width: 480px;
-      border-radius: 20px;
-      box-shadow: 0 8px 24px rgba(25, 118, 210, 0.15);
-      border: 2px solid #64b5f6;
-      overflow: hidden;
-    }
-    .header {
-      background: linear-gradient(135deg, #1e88e5, #1565c0);
-      color: white;
+      border-radius: 16px;
       padding: 20px;
-      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: 0 auto;
     }
-    .header h1 { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
-    .header p { font-size: 13px; opacity: 0.9; }
-    .update-btn {
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+    h1 { font-size: 18px; color: #1565c0; margin-bottom: 12px; text-align: center; }
+    .btn {
+      background: #1e88e5;
       color: white;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      margin-top: 10px;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      width: 100%;
+      font-weight: bold;
+      font-size: 16px;
       cursor: pointer;
+      margin-bottom: 16px;
     }
-    .eta-list { padding: 16px; }
-    .route-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #fffdf0;
-      border: 1.5px solid #ffd100;
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    .result-item {
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      word-break: break-all;
     }
-    .route-item.kmb { background: #fff5f5; border-color: #ff5252; }
-    .route-badge { display: flex; flex-direction: column; align-items: flex-start; min-width: 75px; }
-    .route-number { font-size: 20px; font-weight: 800; }
-    .route-item.ctb .route-number { color: #1565c0; }
-    .route-item.kmb .route-number { color: #e60012; }
-    .company-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; margin-top: 2px; }
-    .ctb-tag { background-color: #ffd100; color: #333; }
-    .kmb-tag { background-color: #e60012; }
-    .route-info { flex: 1; padding: 0 12px; }
-    .dest-name { font-size: 14px; font-weight: bold; color: #444; }
-    .eta-times { text-align: right; min-width: 125px; }
-    .primary-eta { font-size: 15px; font-weight: bold; color: #1565c0; }
-    .secondary-eta { font-size: 11px; color: #777; margin-top: 3px; }
-    .status-msg { text-align: center; padding: 20px; color: #888; font-size: 14px; }
+    .success { background: #e8f5e9; border: 1px solid #4caf50; color: #2e7d32; }
+    .fail { background: #ffebee; border: 1px solid #ef5350; color: #c62828; }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <div class="header">
-      <h1>v寶專用 💙 時間表</h1>
-      <p>📍 永泰道 - 翠灣邨 (Tsui Wan Estate)</p>
-      <button class="update-btn" onclick="loadAllEta()">🔄 即時更新到站時間</button>
-    </div>
-
-    <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在測試城巴 API 並分析站號...</div>
-    </div>
+    <h1>🧪 城巴 API 所有可能性一鍵全測</h1>
+    <button class="btn" onclick="testAllApis()">🚀 立即一次過測試全部 API</button>
+    <div id="testResults">點擊上方按鈕開始測試...</div>
   </div>
 
   <script>
-    const KMB_STOP_ID = '001407';
+    // 所有物理上可能的城巴 API 端點測試組合
+    const TEST_TARGETS = [
+      // 組合 1: 路線 API - 帶大小寫與方向組合
+      { name: '1. route-eta (CTB + 788 + outbound)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788/outbound' },
+      { name: '2. route-eta (CTB + 788 + inbound)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788/inbound' },
+      { name: '3. route-eta (ctb小寫 + 788 + outbound)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/ctb/788/outbound' },
+      { name: '4. route-eta (CTB + 788 + O短寫)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788/O' },
+      { name: '5. route-eta (無方向)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788' },
 
-    async function loadAllEta() {
-      const container = document.getElementById('etaContainer');
+      // 組合 2: 站點 API (stop-eta) - 帶公司碼與路線
+      { name: '6. stop-eta (CTB + 001267)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/001267' },
+      { name: '7. stop-eta (無CTB + 001267)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/001267' },
+      { name: '8. stop-eta (CTB + 001267 + 788)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/001267/788' },
+      { name: '9. stop-eta (CTB + 001267 + 788 + outbound)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/001267/788/outbound' },
+
+      // 組合 3: 聯合 API (eta)
+      { name: '10. eta (CTB + 001267 + 788)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/eta/CTB/001267/788' },
+      { name: '11. eta (CTB + 001267 + 788 + outbound)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/eta/CTB/001267/788/outbound' },
+
+      // 組合 4: 備用站號 (002497 / 002537)
+      { name: '12. route-eta (CTB + 788 備用站)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788/outbound' },
+      { name: '13. stop-eta (CTB + 002497)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/002497' },
+      { name: '14. stop-eta (CTB + 002537)', url: 'https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/002537' }
+    ];
+
+    async function testAllApis() {
+      const container = document.getElementById('testResults');
+      container.innerHTML = '⏳ 正在一次過測試所有 API 可能性，請稍候...';
       
-      try {
-        // 1. 先抓九巴 (已證實 200 OK)
-        const kmbRes = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
-        const kmbData = await kmbRes.json();
-        
-        // 2. 測試抓 788 號線全線資料，印出所有 stop_id
-        const ctbRes = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788`);
-        const ctbData = await ctbRes.json();
-        
-        console.log('=== 城巴 788 號線官方回傳數據 ===', ctbData);
-        
-        if (ctbData.data && ctbData.data.length > 0) {
-          console.log('請在下方選單展開查看完整的 stop_id 列表：');
-          ctbData.data.forEach(item => {
-            console.log(`站點名稱/ID: stop=${item.stop}, seq=${item.seq}, eta=${item.eta}`);
-          });
+      let resultsHtml = '';
+
+      for (const item of TEST_TARGETS) {
+        try {
+          const res = await fetch(item.url);
+          const status = res.status;
+          let okData = false;
+
+          if (res.ok) {
+            const json = await res.json();
+            if (json.data && json.data.length > 0) okData = true;
+            console.log(`✅ [SUCCESS 200] ${item.name}:`, json);
+          } else {
+            console.warn(`❌ [FAIL ${status}] ${item.name}`);
+          }
+
+          if (status === 200) {
+            resultsHtml += `
+              <div class="result-item success">
+                <b>✅ 成功 200 OK!</b><br>
+                <b>名稱:</b> ${item.name}<br>
+                <b>網址:</b> ${item.url}<br>
+                <b>資料量:</b> ${okData ? '有班次數據 🎉' : '無數據或空陣列'}
+              </div>
+            `;
+          } else {
+            resultsHtml += `
+              <div class="result-item fail">
+                <b>❌ 失敗 (HTTP ${status})</b><br>
+                <b>名稱:</b> ${item.name}
+              </div>
+            `;
+          }
+        } catch (e) {
+          resultsHtml += `
+            <div class="result-item fail">
+              <b>❌ 網路異常 / Error</b><br>
+              <b>名稱:</b> ${item.name}
+            </div>
+          `;
         }
-
-        container.innerHTML = `
-          <div class="status-msg" style="color:#1565c0;font-weight:bold;">
-            ✅ API 測試完成！<br><br>
-            請點擊畫面右下角綠色的 <b style="color:#07c160;">vConsole</b> 按鈕，<br>
-            切換到 <b>Log</b> 頁籤，影張相發比我睇。<br>
-            我哋就可以一秒抓出城巴翠灣邨嘅真‧站號！
-          </div>
-        `;
-      } catch (err) {
-        console.error('API Error:', err);
-        container.innerHTML = `<div class="status-msg">測試發生錯誤，請查看 vConsole Log</div>`;
       }
-    }
 
-    loadAllEta();
+      container.innerHTML = resultsHtml;
+    }
   </script>
 </body>
 </html>
