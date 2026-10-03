@@ -93,21 +93,21 @@
   <script>
     const KMB_STOP_ID = '001407';
 
-    // 關注路線 (城巴用全路線 API 抓取；九巴直接抓 001407)
+    // 關注路線 (包含城巴 API 要求的 mandatory 方向: outbound / inbound)
     const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dest: '田灣' },
-      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dest: '啟德' }
+      { route: '788',  company: 'CTB', bound: 'outbound', dest: '中環 (港澳碼頭)' },
+      { route: '789',  company: 'CTB', bound: 'outbound', dest: '金鐘 (樂禮街)' },
+      { route: '8',    company: 'CTB', bound: 'outbound', dest: '杏花邨' },
+      { route: '85',   company: 'CTB', bound: 'inbound',  dest: '寶馬山 / 北角' },
+      { route: '770',  company: 'CTB', bound: 'outbound', dest: '田灣' },
+      { route: '118P', company: 'KMB', bound: 'outbound', dest: '長沙灣 (深旺道)' },
+      { route: '608P', company: 'CTB', bound: 'outbound', dest: '啟德' }
     ];
 
-    // 城巴全路線抓取 (繞過所有 Stop ID 422 錯誤)
-    async function fetchCtbRouteEta(route) {
+    // 城巴路線全線 ETA 抓取
+    async function fetchCtbRouteEta(route, bound) {
       try {
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${route}`);
+        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${route}/${bound}`);
         if (!res.ok) return [];
         const data = await res.json();
         return data.data || [];
@@ -133,7 +133,7 @@
       const now = new Date();
 
       try {
-        const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbRouteEta(r.route));
+        const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbRouteEta(r.route, r.bound));
         const kmbPromise = fetchKmbStopEta();
 
         const [ctbResults, kmbList] = await Promise.all([
@@ -153,8 +153,7 @@
 
           if (target.company === 'CTB') {
             const rawList = ctbMap[target.route] || [];
-            // 過濾有時間且方向為去程(O/outbound)的班次，取前兩班
-            matched = rawList.filter(i => i.eta && (i.dir === 'O' || i.dir === 'outbound' || i.dir === 'I'));
+            matched = rawList.filter(i => i.eta);
           } else {
             matched = kmbList.filter(i => i.route === target.route && i.eta);
           }
