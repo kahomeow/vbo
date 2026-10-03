@@ -90,7 +90,7 @@
     
     .eta-times {
       text-align: right;
-      min-width: 120px;
+      min-width: 125px;
     }
     .primary-eta {
       font-size: 15px;
@@ -125,21 +125,22 @@
   </div>
 
   <script>
-    // 翠灣邨 永泰道 車站編號
-    const KMB_STOP_ID = '001407';
+    // 站點 API ID (翠灣邨, 永泰道)
     const CTB_STOP_ID = '001267';
+    const KMB_STOP_ID = '001407';
 
-    // 關注路線清單
+    // 完全對照官方 App 之日間路線清單
     const WATCH_ROUTES = [
-      { route: '788', company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789', company: 'CTB', dest: '金鐘 (德立街)' },
-      { route: '85',  company: 'CTB', dest: '寶馬山 / 小西灣' },
-      { route: '8X',  company: 'CTB', dest: '跑馬地 (下)' },
-      { route: '118', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P',company: 'KMB', dest: '九龍城 (盛德街)' }
+      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
+      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
+      { route: '8',    company: 'CTB', dest: '杏花邨' },
+      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
+      { route: '770',  company: 'CTB', dest: '田灣' },
+      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
+      { route: '608P', company: 'KMB', dest: '啟德' }
     ];
 
-    // 單獨獲取城巴某路線 ETA
+    // 城巴 ETA 請求
     async function fetchCtbEta(route) {
       try {
         const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${route}`);
@@ -150,7 +151,7 @@
       }
     }
 
-    // 單獨獲取九巴所有路線 ETA
+    // 九巴 ETA 請求
     async function fetchKmbEta() {
       try {
         const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
@@ -166,7 +167,6 @@
       const now = new Date();
 
       try {
-        // 並行發送所有數據請求
         const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbEta(r.route));
         const kmbPromise = fetchKmbEta();
 
@@ -175,9 +175,7 @@
           kmbPromise
         ]);
 
-        // 合併城巴陣列
         const ctbData = ctbResults.flat();
-
         let html = '';
 
         WATCH_ROUTES.forEach(target => {
@@ -193,7 +191,6 @@
           const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
 
           if (matched.length > 0) {
-            // 按時間排序
             matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
             const bus1 = matched[0];
@@ -227,9 +224,8 @@
               </div>
             `;
           } else {
-            // 暫無班次時顯示預設資訊
             html += `
-              <div class="route-item ${companyClass}" style="opacity:0.7;">
+              <div class="route-item ${companyClass}" style="opacity:0.6;">
                 <div class="route-badge">
                   <span class="route-number">${target.route}</span>
                   <span class="company-tag ${tagClass}">${tagText}</span>
