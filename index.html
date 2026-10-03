@@ -91,9 +91,9 @@
   </div>
 
   <script>
-    const CTB_STOP_ID = '001267';
     const KMB_STOP_ID = '001407';
 
+    // 關注路線 (城巴用全路線 API 抓取；九巴直接抓 001407)
     const WATCH_ROUTES = [
       { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
       { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
@@ -104,27 +104,26 @@
       { route: '608P', company: 'CTB', dest: '啟德' }
     ];
 
-    async function fetchSingleEta(target) {
+    // 城巴全路線抓取 (繞過所有 Stop ID 422 錯誤)
+    async function fetchCtbRouteEta(route) {
       try {
-        let url = '';
-        if (target.company === 'CTB') {
-          // 關鍵修正：城巴的 Endpoint 是 /eta/ 不是 /stop-eta/
-          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/eta/CTB/${CTB_STOP_ID}/${target.route}`;
-        } else {
-          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`;
-        }
-
-        const res = await fetch(url);
+        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/${route}`);
         if (!res.ok) return [];
         const data = await res.json();
-        let list = data.data || [];
+        return data.data || [];
+      } catch (e) {
+        return [];
+      }
+    }
 
-        if (target.company === 'KMB') {
-          list = list.filter(i => i.route === target.route);
-        }
-
-        return list.filter(i => i.eta);
-      } catch (err) {
+    // 九巴 001407 抓取
+    async function fetchKmbStopEta() {
+      try {
+        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.data || [];
+      } catch (e) {
         return [];
       }
     }
@@ -134,13 +133,31 @@
       const now = new Date();
 
       try {
-        const promises = WATCH_ROUTES.map(item => fetchSingleEta(item));
-        const results = await Promise.all(promises);
+        const ctbPromises = WATCH_ROUTES.filter(r => r.company === 'CTB').map(r => fetchCtbRouteEta(r.route));
+        const kmbPromise = fetchKmbStopEta();
+
+        const [ctbResults, kmbList] = await Promise.all([
+          Promise.all(ctbPromises),
+          kmbPromise
+        ]);
+
+        let ctbMap = {};
+        WATCH_ROUTES.filter(r => r.company === 'CTB').forEach((r, idx) => {
+          ctbMap[r.route] = ctbResults[idx];
+        });
 
         let html = '';
 
-        WATCH_ROUTES.forEach((target, index) => {
-          const matched = results[index] || [];
+        WATCH_ROUTES.forEach((target) => {
+          let matched = [];
+
+          if (target.company === 'CTB') {
+            const rawList = ctbMap[target.route] || [];
+            // 過濾有時間且方向為去程(O/outbound)的班次，取前兩班
+            matched = rawList.filter(i => i.eta && (i.dir === 'O' || i.dir === 'outbound' || i.dir === 'I'));
+          } else {
+            matched = kmbList.filter(i => i.route === target.route && i.eta);
+          }
 
           const companyClass = target.company.toLowerCase();
           const tagText = target.company === 'CTB' ? '城巴' : '九巴';
