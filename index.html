@@ -3,204 +3,88 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v寶專用 💙 時間表</title>
-
+  <title>788 往中環全線站號對照表</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #f0f8ff;
       color: #333;
       padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
     }
     .card {
-      background: white;
-      width: 100%;
-      max-width: 480px;
-      border-radius: 20px;
-      box-shadow: 0 8px 24px rgba(25, 118, 210, 0.15);
-      border: 2px solid #64b5f6;
-      overflow: hidden;
+      background: white; border-radius: 16px; padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;
     }
-    .header {
-      background: linear-gradient(135deg, #1e88e5, #1565c0);
-      color: white;
-      padding: 20px;
-      text-align: center;
+    h1 { font-size: 18px; color: #1565c0; margin-bottom: 12px; text-align: center; }
+    .stop-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 14px;
     }
-    .header h1 { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
-    .header p { font-size: 13px; opacity: 0.9; }
-    .update-btn {
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      color: white;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      margin-top: 10px;
-      cursor: pointer;
+    .stop-row.highlight {
+      background: #fff3cd; border: 1px solid #ffeba2; border-radius: 8px; font-weight: bold;
     }
-    .eta-list { padding: 16px; }
-    .route-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #fffdf0;
-      border: 1.5px solid #ffd100;
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    .seq-tag {
+      background: #1e88e5; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;
     }
-    .route-item.kmb { background: #fff5f5; border-color: #ff5252; }
-    .route-badge { display: flex; flex-direction: column; align-items: flex-start; min-width: 75px; }
-    .route-number { font-size: 20px; font-weight: 800; }
-    .route-item.ctb .route-number { color: #1565c0; }
-    .route-item.kmb .route-number { color: #e60012; }
-    .company-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; margin-top: 2px; }
-    .ctb-tag { background-color: #ffd100; color: #333; }
-    .kmb-tag { background-color: #e60012; }
-    .route-info { flex: 1; padding: 0 12px; }
-    .dest-name { font-size: 14px; font-weight: bold; color: #444; }
-    .eta-times { text-align: right; min-width: 125px; }
-    .primary-eta { font-size: 15px; font-weight: bold; color: #1565c0; }
-    .secondary-eta { font-size: 11px; color: #777; margin-top: 3px; }
-    .status-msg { text-align: center; padding: 20px; color: #888; font-size: 14px; }
+    .stop-id { font-family: monospace; color: #d32f2f; font-weight: bold; }
+    .status { text-align: center; padding: 20px; color: #666; }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <div class="header">
-      <h1>v寶專用 💙 時間表</h1>
-      <p>📍 永泰道 - 翠灣邨 (Tsui Wan Estate)</p>
-      <button class="update-btn" onclick="loadAllEta()">🔄 即時更新到站時間</button>
-    </div>
-
-    <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在載入班次...</div>
-    </div>
+    <h1>🚌 城巴 788 (小西灣 ➔ 中環) 全線站點</h1>
+    <div id="stopList" class="status">正在向 Data.gov.hk 查詢 788 路線站點...</div>
   </div>
 
   <script>
-    // 修正：城巴往市區/杏花邨方向真正的站號是 001266
-    const CTB_STOP_ID = '001266';
-    const KMB_STOP_ID = '001407';
-
-    const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dest: '田灣' },
-      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dest: '啟德' }
-    ];
-
-    async function fetchSingleEta(target) {
+    async function load788Stops() {
+      const container = document.getElementById('stopList');
       try {
-        let url = '';
-        if (target.company === 'CTB') {
-          url = `https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${CTB_STOP_ID}/${target.route}`;
-        } else {
-          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`;
+        // 1. 抓取 788 往中環 (outbound) 的路線站號清單
+        const routeRes = await fetch('https://rt.data.gov.hk/v2/transport/citybus/route-stop/CTB/788/outbound');
+        const routeData = await routeRes.json();
+        
+        if (!routeData.data || routeData.data.length === 0) {
+          container.innerHTML = '查無 788 路線資料';
+          return;
         }
 
-        const res = await fetch(url);
-        if (!res.ok) return [];
-        const data = await res.json();
-        let list = data.data || [];
+        container.innerHTML = '正在解析站點名稱...';
 
-        if (target.company === 'KMB') {
-          list = list.filter(i => i.route === target.route);
-        }
+        // 2. 併發查詢各站點的中文名稱
+        const stops = routeData.data;
+        const namePromises = stops.map(s => 
+          fetch(`https://rt.data.gov.hk/v2/transport/citybus/stop/${s.stop}`)
+            .then(res => res.json())
+            .then(d => ({ stop: s.stop, seq: s.seq, name: d.data ? d.data.name_tc : '未知車站' }))
+            .catch(() => ({ stop: s.stop, seq: s.seq, name: '載入失敗' }))
+        );
 
-        return list.filter(i => i.eta);
-      } catch (err) {
-        return [];
-      }
-    }
-
-    async function loadAllEta() {
-      const container = document.getElementById('etaContainer');
-      const now = new Date();
-
-      try {
-        const promises = WATCH_ROUTES.map(item => fetchSingleEta(item));
-        const results = await Promise.all(promises);
-
+        const results = await Promise.all(namePromises);
+        
         let html = '';
-
-        WATCH_ROUTES.forEach((target, index) => {
-          const matched = results[index] || [];
-
-          const companyClass = target.company.toLowerCase();
-          const tagText = target.company === 'CTB' ? '城巴' : '九巴';
-          const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
-
-          if (matched.length > 0) {
-            matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
-            const bus1 = matched[0];
-            const bus2 = matched[1];
-
-            const diff1 = Math.max(0, Math.round((new Date(bus1.eta) - now) / 60000));
-            const timeStr1 = new Date(bus1.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            let primaryStr = diff1 === 0 ? '即將到站' : `${diff1} 分鐘 <span style="font-size:11px;font-weight:normal;">(${timeStr1})</span>`;
-            let secondEtaStr = '暫無次班';
-            if (bus2 && bus2.eta) {
-              const diff2 = Math.max(0, Math.round((new Date(bus2.eta) - now) / 60000));
-              const timeStr2 = new Date(bus2.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              secondEtaStr = `次班: ${timeStr2} (${diff2}分)`;
-            }
-
-            html += `
-              <div class="route-item ${companyClass}">
-                <div class="route-badge">
-                  <span class="route-number">${target.route}</span>
-                  <span class="company-tag ${tagClass}">${tagText}</span>
-                </div>
-                <div class="route-info">
-                  <div class="dest-name">往 ${bus1.dest_tc || target.dest}</div>
-                </div>
-                <div class="eta-times">
-                  <div class="primary-eta">${primaryStr}</div>
-                  <div class="secondary-eta">${secondEtaStr}</div>
-                </div>
+        results.forEach(item => {
+          const isTsuiWan = item.name.includes('翠灣') || item.name.includes('永泰道');
+          html += `
+            <div class="stop-row ${isTsuiWan ? 'highlight' : ''}">
+              <div>
+                <span class="seq-tag">站序 ${item.seq}</span>
+                <span style="margin-left: 6px;">${item.name}</span>
               </div>
-            `;
-          } else {
-            html += `
-              <div class="route-item ${companyClass}" style="opacity:0.6;">
-                <div class="route-badge">
-                  <span class="route-number">${target.route}</span>
-                  <span class="company-tag ${tagClass}">${tagText}</span>
-                </div>
-                <div class="route-info">
-                  <div class="dest-name">往 ${target.dest}</div>
-                </div>
-                <div class="eta-times">
-                  <div class="primary-eta" style="color:#888;font-size:13px;">未有班次</div>
-                  <div class="secondary-eta">---</div>
-                </div>
-              </div>
-            `;
-          }
+              <div class="stop-id">${item.stop}</div>
+            </div>
+          `;
         });
 
         container.innerHTML = html;
       } catch (err) {
-        console.error(err);
-        container.innerHTML = `<div class="status-msg">載入失敗，請稍後重試</div>`;
+        container.innerHTML = '查詢失敗：' + err.message;
       }
     }
 
-    loadAllEta();
-    setInterval(loadAllEta, 15000);
+    load788Stops();
   </script>
 </body>
 </html>
