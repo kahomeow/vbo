@@ -91,44 +91,41 @@
   </div>
 
   <script>
+    const CTB_STOP_ID = '001267';
     const KMB_STOP_ID = '001407';
-    // 翠灣邨城巴官方 6 位數 Stop ID 備選
-    const CTB_STOP_IDS = ['001267', '002497', '002537'];
 
+    // 關注路線 (加入城巴 stop-eta 所需的方向參數: outbound / inbound)
     const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dest: '田灣' },
-      { route: '118P', company: 'KMB', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dest: '啟德' }
+      { route: '788',  company: 'CTB', dir: 'outbound', dest: '中環 (港澳碼頭)' },
+      { route: '789',  company: 'CTB', dir: 'outbound', dest: '金鐘 (樂禮街)' },
+      { route: '8',    company: 'CTB', dir: 'outbound', dest: '杏花邨' },
+      { route: '85',   company: 'CTB', dir: 'inbound',  dest: '寶馬山 / 北角' },
+      { route: '770',  company: 'CTB', dir: 'outbound', dest: '田灣' },
+      { route: '118P', company: 'KMB', dir: 'outbound', dest: '長沙灣 (深旺道)' },
+      { route: '608P', company: 'CTB', dir: 'outbound', dest: '啟德' }
     ];
 
-    // 城巴官方全站 ETA 接口（完全遵循官方規格，無 CTB/ 前綴）
-    async function fetchCtbStopEta() {
-      for (const stopId of CTB_STOP_IDS) {
-        try {
-          const res = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/${stopId}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data && data.data.length > 0) {
-              return data.data;
-            }
-          }
-        } catch (e) {}
-      }
-      return [];
-    }
-
-    // 九巴 001407 接口
-    async function fetchKmbStopEta() {
+    async function fetchSingleEta(target) {
       try {
-        const res = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
+        let url = '';
+        if (target.company === 'CTB') {
+          // 城巴完整四層參數結構：/stop-eta/CTB/001267/{route}/{dir}
+          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${target.route}/${target.dir}`;
+        } else {
+          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`;
+        }
+
+        const res = await fetch(url);
         if (!res.ok) return [];
         const data = await res.json();
-        return data.data || [];
-      } catch (e) {
+        let list = data.data || [];
+
+        if (target.company === 'KMB') {
+          list = list.filter(i => i.route === target.route);
+        }
+
+        return list.filter(i => i.eta);
+      } catch (err) {
         return [];
       }
     }
@@ -138,21 +135,13 @@
       const now = new Date();
 
       try {
-        const [ctbList, kmbList] = await Promise.all([
-          fetchCtbStopEta(),
-          fetchKmbStopEta()
-        ]);
+        const promises = WATCH_ROUTES.map(item => fetchSingleEta(item));
+        const results = await Promise.all(promises);
 
         let html = '';
 
-        WATCH_ROUTES.forEach((target) => {
-          let matched = [];
-
-          if (target.company === 'CTB') {
-            matched = ctbList.filter(i => i.route === target.route && i.eta);
-          } else {
-            matched = kmbList.filter(i => i.route === target.route && i.eta);
-          }
+        WATCH_ROUTES.forEach((target, index) => {
+          const matched = results[index] || [];
 
           const companyClass = target.company.toLowerCase();
           const tagText = target.company === 'CTB' ? '城巴' : '九巴';
