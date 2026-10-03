@@ -86,126 +86,49 @@
     </div>
 
     <div class="eta-list" id="etaContainer">
-      <div class="status-msg">正在載入班次...</div>
+      <div class="status-msg">正在測試城巴 API 並分析站號...</div>
     </div>
   </div>
 
   <script>
-    const CTB_STOP_ID = '001267';
     const KMB_STOP_ID = '001407';
-
-    // 關注路線 (加入城巴 stop-eta 所需的方向參數: outbound / inbound)
-    const WATCH_ROUTES = [
-      { route: '788',  company: 'CTB', dir: 'outbound', dest: '中環 (港澳碼頭)' },
-      { route: '789',  company: 'CTB', dir: 'outbound', dest: '金鐘 (樂禮街)' },
-      { route: '8',    company: 'CTB', dir: 'outbound', dest: '杏花邨' },
-      { route: '85',   company: 'CTB', dir: 'inbound',  dest: '寶馬山 / 北角' },
-      { route: '770',  company: 'CTB', dir: 'outbound', dest: '田灣' },
-      { route: '118P', company: 'KMB', dir: 'outbound', dest: '長沙灣 (深旺道)' },
-      { route: '608P', company: 'CTB', dir: 'outbound', dest: '啟德' }
-    ];
-
-    async function fetchSingleEta(target) {
-      try {
-        let url = '';
-        if (target.company === 'CTB') {
-          // 城巴完整四層參數結構：/stop-eta/CTB/001267/{route}/{dir}
-          url = `https://data.etabus.gov.hk/v1/transport/citybus-nwfb/stop-eta/CTB/${CTB_STOP_ID}/${target.route}/${target.dir}`;
-        } else {
-          url = `https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`;
-        }
-
-        const res = await fetch(url);
-        if (!res.ok) return [];
-        const data = await res.json();
-        let list = data.data || [];
-
-        if (target.company === 'KMB') {
-          list = list.filter(i => i.route === target.route);
-        }
-
-        return list.filter(i => i.eta);
-      } catch (err) {
-        return [];
-      }
-    }
 
     async function loadAllEta() {
       const container = document.getElementById('etaContainer');
-      const now = new Date();
-
+      
       try {
-        const promises = WATCH_ROUTES.map(item => fetchSingleEta(item));
-        const results = await Promise.all(promises);
+        // 1. 先抓九巴 (已證實 200 OK)
+        const kmbRes = await fetch(`https://data.etabus.gov.hk/v1/transport/kmb/stop-eta/${KMB_STOP_ID}`);
+        const kmbData = await kmbRes.json();
+        
+        // 2. 測試抓 788 號線全線資料，印出所有 stop_id
+        const ctbRes = await fetch(`https://data.etabus.gov.hk/v1/transport/citybus-nwfb/route-eta/CTB/788`);
+        const ctbData = await ctbRes.json();
+        
+        console.log('=== 城巴 788 號線官方回傳數據 ===', ctbData);
+        
+        if (ctbData.data && ctbData.data.length > 0) {
+          console.log('請在下方選單展開查看完整的 stop_id 列表：');
+          ctbData.data.forEach(item => {
+            console.log(`站點名稱/ID: stop=${item.stop}, seq=${item.seq}, eta=${item.eta}`);
+          });
+        }
 
-        let html = '';
-
-        WATCH_ROUTES.forEach((target, index) => {
-          const matched = results[index] || [];
-
-          const companyClass = target.company.toLowerCase();
-          const tagText = target.company === 'CTB' ? '城巴' : '九巴';
-          const tagClass = target.company === 'CTB' ? 'ctb-tag' : 'kmb-tag';
-
-          if (matched.length > 0) {
-            matched.sort((a, b) => new Date(a.eta) - new Date(b.eta));
-            const bus1 = matched[0];
-            const bus2 = matched[1];
-
-            const diff1 = Math.max(0, Math.round((new Date(bus1.eta) - now) / 60000));
-            const timeStr1 = new Date(bus1.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            let primaryStr = diff1 === 0 ? '即將到站' : `${diff1} 分鐘 <span style="font-size:11px;font-weight:normal;">(${timeStr1})</span>`;
-            let secondEtaStr = '暫無次班';
-            if (bus2 && bus2.eta) {
-              const diff2 = Math.max(0, Math.round((new Date(bus2.eta) - now) / 60000));
-              const timeStr2 = new Date(bus2.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              secondEtaStr = `次班: ${timeStr2} (${diff2}分)`;
-            }
-
-            html += `
-              <div class="route-item ${companyClass}">
-                <div class="route-badge">
-                  <span class="route-number">${target.route}</span>
-                  <span class="company-tag ${tagClass}">${tagText}</span>
-                </div>
-                <div class="route-info">
-                  <div class="dest-name">往 ${bus1.dest_tc || target.dest}</div>
-                </div>
-                <div class="eta-times">
-                  <div class="primary-eta">${primaryStr}</div>
-                  <div class="secondary-eta">${secondEtaStr}</div>
-                </div>
-              </div>
-            `;
-          } else {
-            html += `
-              <div class="route-item ${companyClass}" style="opacity:0.6;">
-                <div class="route-badge">
-                  <span class="route-number">${target.route}</span>
-                  <span class="company-tag ${tagClass}">${tagText}</span>
-                </div>
-                <div class="route-info">
-                  <div class="dest-name">往 ${target.dest}</div>
-                </div>
-                <div class="eta-times">
-                  <div class="primary-eta" style="color:#888;font-size:13px;">未有班次</div>
-                  <div class="secondary-eta">---</div>
-                </div>
-              </div>
-            `;
-          }
-        });
-
-        container.innerHTML = html;
+        container.innerHTML = `
+          <div class="status-msg" style="color:#1565c0;font-weight:bold;">
+            ✅ API 測試完成！<br><br>
+            請點擊畫面右下角綠色的 <b style="color:#07c160;">vConsole</b> 按鈕，<br>
+            切換到 <b>Log</b> 頁籤，影張相發比我睇。<br>
+            我哋就可以一秒抓出城巴翠灣邨嘅真‧站號！
+          </div>
+        `;
       } catch (err) {
-        console.error(err);
-        container.innerHTML = `<div class="status-msg">載入失敗，請稍後重試</div>`;
+        console.error('API Error:', err);
+        container.innerHTML = `<div class="status-msg">測試發生錯誤，請查看 vConsole Log</div>`;
       }
     }
 
     loadAllEta();
-    setInterval(loadAllEta, 15000);
   </script>
 </body>
 </html>
